@@ -187,6 +187,27 @@ def load_corpus(name, split=0.8, V=10000, shuffle=0):
 
 ##
 # Use this function
+def load_corpus_pairs(name, split=0.8, V=10000, shuffle=0):
+    """Load a named corpus and splits into 2 train/test along sentences. 
+       Returns:
+       vocab - Vocabulary for corpus
+       train_ids1 - Flattened array of first set of training sentences
+       test_ids1 - Flattened array of first set of test sentences
+       train_ids2 - Flattened array of second set of training sentences
+       test_ids2 - Flattened array of second set of test sentences
+       """
+    corpus = get_corpus(name)
+    vocab = build_vocab(corpus, V)
+    train_sentences1, test_sentences1 = get_train_test_sents(corpus[:len(corpus)/2], split, shuffle)
+    train_sentences2, test_sentences2 = get_train_test_sents(corpus[len(corpus)/2:], split, shuffle)
+    train_ids1 = preprocess_sentences(train_sentences1, vocab)
+    test_ids1 = preprocess_sentences(test_sentences1, vocab)
+    train_ids2 = preprocess_sentences(train_sentences2, vocab)
+    test_ids2 = preprocess_sentences(test_sentences2, vocab)
+    return vocab, train_ids1, test_ids1, train_ids2, test_ids2
+
+##
+# Use this function
 def batch_generator(ids, batch_size, max_time):
     """Convert ids to data-matrix form."""
     # Clip to multiple of max_time for convenience
