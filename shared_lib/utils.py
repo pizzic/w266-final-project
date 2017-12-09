@@ -157,6 +157,39 @@ def get_train_test_sents(corpus, split=0.8, shuffle=True):
 
     return train_sentences, test_sentences
 
+def get_train_test_sents_categories(corpus, split=0.8, shuffle=True, categories):
+    """Get train and test sentences.
+
+    Args:
+      corpus: nltk.corpus that supports sents() function
+      split (double): fraction to use as training set
+      shuffle (int or bool): seed for shuffle of input data, or False to just
+      take the training data as the first xx% contiguously.
+
+    Returns:
+      train_sentences, test_sentences ( list(list(string)) ): the train and test
+      splits
+    """
+    sentences = np.array(corpus.sents(categories = categories), dtype=object)
+    fmt = (len(sentences), sum(map(len, sentences)))
+    print "Loaded %d sentences (%g tokens)" % fmt
+
+    if shuffle:
+        rng = np.random.RandomState(shuffle)
+        rng.shuffle(sentences)  # in-place
+    train_frac = 0.8
+    split_idx = int(train_frac * len(sentences))
+    train_sentences = sentences[:split_idx]
+    test_sentences = sentences[split_idx:]
+
+    fmt = (len(train_sentences), sum(map(len, train_sentences)))
+    print "Training set: %d sentences (%d tokens)" % fmt
+    fmt = (len(test_sentences), sum(map(len, test_sentences)))
+    print "Test set: %d sentences (%d tokens)" % fmt
+
+    return train_sentences, test_sentences
+
+
 def preprocess_sentences(sentences, vocab):
     """Preprocess sentences by canonicalizing and mapping to ids.
 
@@ -184,6 +217,24 @@ def load_corpus(name, split=0.8, V=10000, shuffle=0):
     train_ids = preprocess_sentences(train_sentences, vocab)
     test_ids = preprocess_sentences(test_sentences, vocab)
     return vocab, train_ids, test_ids
+
+
+##
+# Use this function
+def load_corpus_pairs(name, split=0.8, V=10000, shuffle=0):
+    """Load a named corpus and split train/test along sentences."""
+    corpus = get_corpus(name)
+    category1 = ['news','editorial', 'reviews']
+    category2 = list(set(corpus.categories()) - set(category1))
+    vocab = build_vocab(corpus, V)
+    train1_sentences, test1_sentences = get_train_test_sents_categories(corpus, split, shuffle, category1)
+    train2_sentences, test2_sentences = get_train_test_sents_categories(corpus, split, shuffle, category2)
+    train1_ids = preprocess_sentences(train1_sentences, vocab)
+    test1_ids = preprocess_sentences(test1_sentences, vocab)
+    train2_ids = preprocess_sentences(train2_sentences, vocab)
+    test2_ids = preprocess_sentences(test2_sentences, vocab)
+    return vocab, train1_ids, test1_ids, train2_ids, test2_ids
+
 
 ##
 # Use this function
