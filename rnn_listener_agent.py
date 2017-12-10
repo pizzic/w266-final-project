@@ -64,7 +64,7 @@ def with_self_graph(function):
     return wrapper
 
 
-class ListenerAgent(object):
+class RNNListenerAgent(object):
     def __init__(self, graph=None, *args, **kwargs):
         """Init function.
 
@@ -81,7 +81,7 @@ class ListenerAgent(object):
         self.SetParams(*args, **kwargs)
 
     @with_self_graph
-    def SetParams(self, corpus_vocab_size, embedding_size, agent_vocab_size, 
+    def SetParams(self, corpus_vocab_size, embedding_size, agent_vocab_size, message_tensor, 
       softmax_ns=200, num_layers=1):
         # Model structure; these need to be fixed for a given model.
         self.corpus_vocab = corpus_vocab_size
@@ -104,6 +104,9 @@ class ListenerAgent(object):
 
             self.use_dropout_ = tf.placeholder_with_default(
                 False, [], name="use_dropout")
+
+            # Message vector.  Should be a one-hot vector of size agent_vocab.
+            self.input_m_ = message_tensor
 
             # If use_dropout is fed as 'True', this will have value 0.5.
             self.dropout_keep_prob_ = tf.cond(
@@ -151,9 +154,6 @@ class ListenerAgent(object):
         # Should be shape [batch_size, max_time] and contain integer word indices.
         self.input_w2_ = tf.placeholder(tf.int32, [None, None], name="w2")
 
-        # Message vector.  Should be a one-hot vector of size agent_vocab.
-        self.input_m_ = None
-
         # Initial hidden state. You'll need to overwrite this with cell.zero_state
         # once you construct your RNN cell.
         self.initial_h_ = None
@@ -176,9 +176,9 @@ class ListenerAgent(object):
 
         # Get dynamic shape info from inputs
         with tf.name_scope("batch_size"):
-            self.batch_size_ = tf.shape(self.input_w_)[0]
+            self.batch_size_ = tf.shape(self.input_w1_)[0]
         with tf.name_scope("max_time"):
-            self.max_time_ = tf.shape(self.input_w_)[1]
+            self.max_time_ = tf.shape(self.input_w1_)[1]
 
         # Get sequence length from input_w_.
         # TL;DR: pass this to dynamic_rnn.
@@ -194,16 +194,16 @@ class ListenerAgent(object):
         # Construct embedding layer
         with tf.name_scope("Embedding_Layer"):
             self.W_in_ = tf.Variable(tf.random_uniform([self.corpus_vocab, self.embedding], 0.0, 1.0), name="W_in_")
-            self.x1_ = tf.reshape(tf.nn.embedding_lookup(
-                self.W_in_, self.input_w1_), [self.batch_size_, self.max_time_, self.embedding], name = "x1_")
-            self.x2_ = tf.reshape(tf.nn.embedding_lookup(
-                self.W_in_, self.input_w2_), [self.batch_size_, self.max_time_, self.embedding], name = "x2_")
-            self.x_ = tf.concat([self.x1_, self.x2_, self.m_], 1, name = "x_")
-
+            self.x1_ = tf.reshape(tf.nn.embedding_lookup(self.W_in_, self.input_w1_), 
+                                  [self.batch_size_, self.max_time_, self.embedding], name = "x1_")
+            self.x2_ = tf.reshape(tf.nn.embedding_lookup(self.W_in_, self.input_w2_), 
+                                  [self.batch_size_, self.max_time_, self.embedding], name = "x2_")
+            self.x_ = tf.concat([self.x1_, self.x2_, tf.reshape(self.input_m_, [self.batch_size_, self.max_time_, -1])], 
+                                2, name = "x_")
 
         # Construct RNN/LSTM cell and recurrent layer.
         with tf.name_scope("Recurrent_Layer"):
-            self.cell_ = MakeFancyRNNCell(2*self.embedding+agent_size, self.dropout_keep_prob_, self.num_layers)
+            self.cell_ = MakeFancyRNNCell(2*self.embedding+self.agent_vocab, self.dropout_keep_prob_, self.num_layers)
 
             self.initial_h_ = self.cell_.zero_state(self.batch_size_, tf.float32)
             self.o_, self.final_h_ = tf.nn.dynamic_rnn(self.cell_, self.x_, initial_state=self.initial_h_, 
@@ -216,7 +216,7 @@ class ListenerAgent(object):
         # replacement for tf.matmul that will handle the "time" dimension
         # properly.
         with tf.name_scope("Output_Layer"):
-            self.W_out_ = tf.Variable(tf.random_uniform([2*self.embedding+agent_vocab, 1], 0.0, 1.0), name="W_out_")
+            self.W_out_ = tf.Variable(tf.random_uniform([2*self.embedding+self.agent_vocab, 1], 0.0, 1.0), name="W_out_")
             self.b_out_ = tf.Variable(tf.zeros([1]), name="b_out_")
             self.logits_ = matmul3d(self.o_, self.W_out_) + self.b_out_
 

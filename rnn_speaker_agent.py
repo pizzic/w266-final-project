@@ -64,7 +64,7 @@ def with_self_graph(function):
     return wrapper
 
 
-class SpeakerAgent(object):
+class RNNSpeakerAgent(object):
     def __init__(self, graph=None, *args, **kwargs):
         """Init function.
 
@@ -121,7 +121,7 @@ class SpeakerAgent(object):
         """Construct the core RNNLM graph, needed for any use of the model.
 
         This should include:
-        - Placeholders for input tensors (input_w_, initial_h_, target_y_)
+        - Placeholders for input tensors (input_w1_, input_w2, input_t_, initial_h_, target_y_)
         - Variables for model parameters
         - Tensors representing various intermediate states
         - A Tensor for the final state (final_h_)
@@ -152,7 +152,7 @@ class SpeakerAgent(object):
         self.input_w2_ = tf.placeholder(tf.int32, [None, None], name="w2")
 
         # Input target marker.  Should be a one-hot vector of size 2.
-        self.input_t_ = tf.placeholder(tf.int32, [None, None], name="t")
+        self.input_t_ = tf.placeholder(tf.float32, [None, None], name="t")
 
         # Initial hidden state. You'll need to overwrite this with cell.zero_state
         # once you construct your RNN cell.
@@ -168,7 +168,7 @@ class SpeakerAgent(object):
         # [batch_size, max_time, V].
         self.logits_ = None
 
-        # Should be the same shape as inputs_w_
+        # Should be the shape as [batch_size, agent_vocab_size
         self.target_y_ = tf.placeholder(tf.int32, [None, None], name="y")
 
         # Replace this with an actual loss function
@@ -176,9 +176,9 @@ class SpeakerAgent(object):
 
         # Get dynamic shape info from inputs
         with tf.name_scope("batch_size"):
-            self.batch_size_ = tf.shape(self.input_w_)[0]
+            self.batch_size_ = tf.shape(self.input_w1_)[0]
         with tf.name_scope("max_time"):
-            self.max_time_ = tf.shape(self.input_w_)[1]
+            self.max_time_ = tf.shape(self.input_w1_)[1]
 
         # Get sequence length from input_w_.
         # TL;DR: pass this to dynamic_rnn.
@@ -194,11 +194,12 @@ class SpeakerAgent(object):
         # Construct embedding layer
         with tf.name_scope("Embedding_Layer"):
             self.W_in_ = tf.Variable(tf.random_uniform([self.corpus_vocab, self.embedding], 0.0, 1.0), name="W_in_")
-            self.x1_ = tf.reshape(tf.nn.embedding_lookup(
-                self.W_in_, self.input_w1_), [self.batch_size_, self.max_time_, self.embedding], name = "x1_")
-            self.x2_ = tf.reshape(tf.nn.embedding_lookup(
-                self.W_in_, self.input_w2_), [self.batch_size_, self.max_time_, self.embedding], name = "x2_")
-            self.x_ = tf.concat([self.x1_, self.x2_, self.t_], 1, name = "x_")
+            self.x1_ = tf.reshape(tf.nn.embedding_lookup(self.W_in_, self.input_w1_), 
+                                  [self.batch_size_, self.max_time_, self.embedding], name = "x1_")
+            self.x2_ = tf.reshape(tf.nn.embedding_lookup(self.W_in_, self.input_w2_), 
+                                  [self.batch_size_, self.max_time_, self.embedding], name = "x2_")
+            self.x_ = tf.concat([self.x1_, self.x2_, tf.reshape(self.input_t_, [self.batch_size_, self.max_time_, 1])], 
+                                2, name = "x_")
 
 
         # Construct RNN/LSTM cell and recurrent layer.
@@ -293,6 +294,6 @@ class SpeakerAgent(object):
         """ Construct the output graph for the speaker agent.
         """
 
-        self.message_ = tf.sigmoid(self.logits_, name = "message_")
+        self.message_ = tf.nn.softmax(self.logits_, name = "message_")
         
         

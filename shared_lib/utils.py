@@ -157,7 +157,7 @@ def get_train_test_sents(corpus, split=0.8, shuffle=True):
 
     return train_sentences, test_sentences
 
-def get_train_test_sents_categories(corpus, split=0.8, shuffle=True, categories):
+def get_train_test_sents_categories(corpus, categories, split=0.8, shuffle=True):
     """Get train and test sentences.
 
     Args:
