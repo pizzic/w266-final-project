@@ -21,7 +21,7 @@ def matmul3d(X, W):
     return tf.reshape(XWr, newshape)
 
 
-def MakeFancyRNNCell(H, keep_prob, num_layers=1):
+def MakeFancyRNNCell(H, keep_prob, num_layers=1, name_scope="speaker"):
     """Make a fancy RNN cell.
 
     Use tf.nn.rnn_cell functions to construct an LSTM cell.
@@ -35,13 +35,14 @@ def MakeFancyRNNCell(H, keep_prob, num_layers=1):
     Returns:
       (tf.nn.rnn_cell.RNNCell) multi-layer LSTM cell with dropout
     """
-    cells = []
-    for _ in xrange(num_layers):
-      cell = tf.contrib.rnn.BasicLSTMCell(H, forget_bias=0.0)
-      cell = tf.contrib.rnn.DropoutWrapper(
-          cell, input_keep_prob=keep_prob, output_keep_prob=keep_prob)
-      cells.append(cell)
-    return tf.contrib.rnn.MultiRNNCell(cells)
+    with tf.variable_scope(name_scope):
+        cells = []
+        for _ in xrange(num_layers):
+          cell = tf.contrib.rnn.BasicLSTMCell(H, forget_bias=0.0)
+          cell = tf.contrib.rnn.DropoutWrapper(
+              cell, input_keep_prob=keep_prob, output_keep_prob=keep_prob)
+          cells.append(cell)
+        return tf.contrib.rnn.MultiRNNCell(cells)
 
 
 # Decorator-foo to avoid indentation hell.
@@ -143,92 +144,93 @@ class RNNSpeakerAgent(object):
 
         See the in-line comments for more detail.
         """
-        # Input ids, with dynamic shape depending on input.
-        # Should be shape [batch_size, max_time] and contain integer word indices.
-        self.input_w1_ = tf.placeholder(tf.int32, [None, None], name="w1")
+        with tf.variable_scope("speaker"):
+            # Input ids, with dynamic shape depending on input.
+            # Should be shape [batch_size, max_time] and contain integer word indices.
+            self.input_w1_ = tf.placeholder(tf.int32, [None, None], name="w1")
 
-        # Input ids, with dynamic shape depending on input.
-        # Should be shape [batch_size, max_time] and contain integer word indices.
-        self.input_w2_ = tf.placeholder(tf.int32, [None, None], name="w2")
+            # Input ids, with dynamic shape depending on input.
+            # Should be shape [batch_size, max_time] and contain integer word indices.
+            self.input_w2_ = tf.placeholder(tf.int32, [None, None], name="w2")
 
-        # Input target marker.  Should be a one-hot vector of size 2.
-        self.input_t_ = tf.placeholder(tf.float32, [None, None], name="t")
+            # Input target marker.  Should be a one-hot vector of size 2.
+            self.input_t_ = tf.placeholder(tf.float32, [None, None], name="t")
 
-        # Initial hidden state. You'll need to overwrite this with cell.zero_state
-        # once you construct your RNN cell.
-        self.initial_h_ = None
+            # Initial hidden state. You'll need to overwrite this with cell.zero_state
+            # once you construct your RNN cell.
+            self.initial_h_ = None
 
-        # Final hidden state. You'll need to overwrite this with the output from
-        # tf.nn.dynamic_rnn so that you can pass it in to the next batch (if
-        # applicable).
-        self.final_h_ = None
+            # Final hidden state. You'll need to overwrite this with the output from
+            # tf.nn.dynamic_rnn so that you can pass it in to the next batch (if
+            # applicable).
+            self.final_h_ = None
 
-        # Output logits, which can be used by loss functions or for prediction.
-        # Overwrite this with an actual Tensor of shape
-        # [batch_size, max_time, V].
-        self.logits_ = None
+            # Output logits, which can be used by loss functions or for prediction.
+            # Overwrite this with an actual Tensor of shape
+            # [batch_size, max_time, V].
+            self.logits_ = None
 
-        # Should be the shape as [batch_size, agent_vocab_size
-        self.target_y_ = tf.placeholder(tf.int32, [None, None], name="y")
+            # Should be the shape as [batch_size, agent_vocab_size
+            self.target_y_ = tf.placeholder(tf.int32, [None, None], name="y")
 
-        # Replace this with an actual loss function
-        self.loss_ = None
+            # Replace this with an actual loss function
+            self.loss_ = None
 
-        # Get dynamic shape info from inputs
-        with tf.name_scope("batch_size"):
-            self.batch_size_ = tf.shape(self.input_w1_)[0]
-        with tf.name_scope("max_time"):
-            self.max_time_ = tf.shape(self.input_w1_)[1]
+            # Get dynamic shape info from inputs
+            with tf.name_scope("batch_size"):
+                self.batch_size_ = tf.shape(self.input_w1_)[0]
+            with tf.name_scope("max_time"):
+                self.max_time_ = tf.shape(self.input_w1_)[1]
 
-        # Get sequence length from input_w_.
-        # TL;DR: pass this to dynamic_rnn.
-        # This will be a vector with elements ns[i] = len(input_w_[i])
-        # You can override this in feed_dict if you want to have different-length
-        # sequences in the same batch, although you shouldn't need to for this
-        # assignment.
-        self.ns_ = tf.tile([self.max_time_], [self.batch_size_, ], name="ns")
+            # Get sequence length from input_w_.
+            # TL;DR: pass this to dynamic_rnn.
+            # This will be a vector with elements ns[i] = len(input_w_[i])
+            # You can override this in feed_dict if you want to have different-length
+            # sequences in the same batch, although you shouldn't need to for this
+            # assignment.
+            self.ns_ = tf.tile([self.max_time_], [self.batch_size_, ], name="ns")
 
-        #### YOUR CODE HERE ####
-        # See hints in instructions!
+            #### YOUR CODE HERE ####
+            # See hints in instructions!
 
-        # Construct embedding layer
-        with tf.name_scope("Embedding_Layer"):
-            self.W_in_ = tf.Variable(tf.random_uniform([self.corpus_vocab, self.embedding], 0.0, 1.0), name="W_in_")
-            self.x1_ = tf.reshape(tf.nn.embedding_lookup(self.W_in_, self.input_w1_), 
-                                  [self.batch_size_, self.max_time_, self.embedding], name = "x1_")
-            self.x2_ = tf.reshape(tf.nn.embedding_lookup(self.W_in_, self.input_w2_), 
-                                  [self.batch_size_, self.max_time_, self.embedding], name = "x2_")
-            self.x_ = tf.concat([self.x1_, self.x2_, tf.reshape(self.input_t_, [self.batch_size_, self.max_time_, 1])], 
-                                2, name = "x_")
-
-
-        # Construct RNN/LSTM cell and recurrent layer.
-        with tf.name_scope("Recurrent_Layer"):
-            self.cell_ = MakeFancyRNNCell(2*self.embedding+1, self.dropout_keep_prob_, self.num_layers)
-
-            self.initial_h_ = self.cell_.zero_state(self.batch_size_, tf.float32)
-            self.o_, self.final_h_ = tf.nn.dynamic_rnn(self.cell_, self.x_, initial_state=self.initial_h_, 
-                                                       sequence_length=self.ns_)
-            #self.o_, self.final_h_ = tf.nn.dynamic_rnn(self.cell_, self.x_, initial_state=self.initial_h_)
-            
-
-        # Softmax output layer, over vocabulary. Just compute logits_ here.
-        # Hint: the matmul3d function will be useful here; it's a drop-in
-        # replacement for tf.matmul that will handle the "time" dimension
-        # properly.
-        with tf.name_scope("Output_Layer"):
-            self.W_out_ = tf.Variable(tf.random_uniform([2*self.embedding+1, self.agent_vocab], 0.0, 1.0), name="W_out_")
-            self.b_out_ = tf.Variable(tf.zeros([self.agent_vocab]), name="b_out_")
-            self.logits_ = matmul3d(self.o_, self.W_out_) + self.b_out_
+            # Construct embedding layer
+            with tf.name_scope("Speaker_Embedding_Layer"):
+                self.W_in_ = tf.Variable(tf.random_uniform([self.corpus_vocab, self.embedding], 0.0, 1.0), name="W_in_")
+                self.x1_ = tf.reshape(tf.nn.embedding_lookup(self.W_in_, self.input_w1_), 
+                                      [self.batch_size_, self.max_time_, self.embedding], name = "x1_")
+                self.x2_ = tf.reshape(tf.nn.embedding_lookup(self.W_in_, self.input_w2_), 
+                                      [self.batch_size_, self.max_time_, self.embedding], name = "x2_")
+                self.x_ = tf.concat([self.x1_, self.x2_, tf.reshape(self.input_t_, [self.batch_size_, self.max_time_, 1])], 
+                                    2, name = "x_")
 
 
+            # Construct RNN/LSTM cell and recurrent layer.
+            with tf.name_scope("Speaker_Recurrent_Layer"):
+                self.cell_ = MakeFancyRNNCell(2*self.embedding+1, self.dropout_keep_prob_, self.num_layers)
 
-        # Loss computation (true loss, for prediction)
-        self.loss_ = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(
-            logits=self.logits_, labels=self.target_y_), name = "loss_")
+                self.initial_h_ = self.cell_.zero_state(self.batch_size_, tf.float32)
+                self.o_, self.final_h_ = tf.nn.dynamic_rnn(self.cell_, self.x_, initial_state=self.initial_h_, 
+                                                           sequence_length=self.ns_)
+                #self.o_, self.final_h_ = tf.nn.dynamic_rnn(self.cell_, self.x_, initial_state=self.initial_h_)
 
 
-        #### END(YOUR CODE) ####
+            # Softmax output layer, over vocabulary. Just compute logits_ here.
+            # Hint: the matmul3d function will be useful here; it's a drop-in
+            # replacement for tf.matmul that will handle the "time" dimension
+            # properly.
+            with tf.name_scope("Speaker_Output_Layer"):
+                self.W_out_ = tf.Variable(tf.random_uniform([2*self.embedding+1, self.agent_vocab], 0.0, 1.0), name="W_out_")
+                self.b_out_ = tf.Variable(tf.zeros([self.agent_vocab]), name="b_out_")
+                self.logits_ = matmul3d(self.o_, self.W_out_) + self.b_out_
+
+
+
+            # Loss computation (true loss, for prediction)
+            self.loss_ = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(
+                logits=self.logits_, labels=self.target_y_), name = "loss_")
+
+
+            #### END(YOUR CODE) ####
 
     @with_self_graph
     def BuildTrainGraph(self):
@@ -242,31 +244,32 @@ class RNNSpeakerAgent(object):
         _average_ loss across all examples in the batch (i.e. use tf.reduce_mean,
         not tf.reduce_sum).
         """
-        # Replace this with an actual training op
-        self.train_step_ = None
+        with tf.variable_scope("speaker"):
+            # Replace this with an actual training op
+            self.train_step_ = None
 
-        # Replace this with an actual loss function
-        self.train_loss_ = None
+            # Replace this with an actual loss function
+            self.train_loss_ = None
 
-        #### YOUR CODE HERE ####
-        # See hints in instructions!
+            #### YOUR CODE HERE ####
+            # See hints in instructions!
 
-        # Define approximate loss function.
-        # Note: self.softmax_ns (i.e. k=200) is already defined; use that as the
-        # number of samples.
-        # Loss computation (sampled, for training)
-        self.train_loss_ = tf.reduce_mean(
-            tf.nn.sampled_softmax_loss(weights=tf.transpose(self.W_out_), biases=self.b_out_, 
-                                       inputs=tf.reshape(self.o_, [-1, 2*self.embedding+1]), 
-                                       labels=tf.reshape(self.target_y_, [-1, 1]), 
-                                       num_sampled=self.softmax_ns, num_classes=self.agent_vocab))
-
-
-        # Define optimizer and training op
-        self.train_step_ = tf.train.AdagradOptimizer(self.learning_rate_).minimize(self.train_loss_)
+            # Define approximate loss function.
+            # Note: self.softmax_ns (i.e. k=200) is already defined; use that as the
+            # number of samples.
+            # Loss computation (sampled, for training)
+            self.train_loss_ = tf.reduce_mean(
+                tf.nn.sampled_softmax_loss(weights=tf.transpose(self.W_out_), biases=self.b_out_, 
+                                           inputs=tf.reshape(self.o_, [-1, 2*self.embedding+1]), 
+                                           labels=tf.reshape(self.target_y_, [-1, 1]), 
+                                           num_sampled=self.softmax_ns, num_classes=self.agent_vocab))
 
 
-        #### END(YOUR CODE) ####
+            # Define optimizer and training op
+            self.train_step_ = tf.train.AdagradOptimizer(self.learning_rate_).minimize(self.train_loss_)
+
+
+            #### END(YOUR CODE) ####
 
 #    @with_self_graph
 #    def BuildSamplerGraph(self):
@@ -293,7 +296,7 @@ class RNNSpeakerAgent(object):
     def BuildOutputGraph(self):
         """ Construct the output graph for the speaker agent.
         """
-
-        self.message_ = tf.nn.softmax(self.logits_, name = "message_")
+        with tf.variable_scope("speaker"):
+            self.message_ = tf.nn.softmax(self.logits_, name = "message_")
         
         
