@@ -251,5 +251,18 @@ def batch_generator(ids, batch_size, max_time):
     # Yield batches
     for i in xrange(0, input_w.shape[1], max_time):
 	yield input_w[:,i:i+max_time], target_y[:,i:i+max_time]
-
-
+    
+    #Use this function for Paralex dataset
+##
+#Paralex corpus
+def paralex_corpus():
+    spltab = re.compile("[^\t]+")
+    qs_lst = list((open(questions.txt, "r").readlines())
+    qs_data = [s.strip() for s in qs_lst]
+    qs = preprocess_sentences(spltab.findall(qs_data)[0], vocab)
+    qs_words = [word for s in questions for word in s]
+    vocab = build_vocab(qs_words, V=10000)
+    spl1 = int(len(questions)*3/8)
+    spl2 = int(len(questions)/2))
+    spl3 = int(len(questions)*7/8)
+    return vocab, questions[:spl1], questions[spl1:spl2], questions[spl2:spl3], questions[spl3:]
